@@ -52,7 +52,7 @@ afterEach(() => {
 });
 
 describe('zipDirectory', () => {
-  it('пакует вложенные каталоги в архив с папкой в корне', () => {
+  it('пакует содержимое каталога без папки-обёртки', () => {
     workDir = mkdtempSync(join(tmpdir(), 'saby-zip-'));
     const source = join(workDir, 'extension');
     mkdirSync(join(source, 'assets'), { recursive: true });
@@ -66,10 +66,7 @@ describe('zipDirectory', () => {
     expect(rawBytes).toBe(
       Buffer.byteLength('{"version":"1"}') + Buffer.byteLength('console.log(1);') * 50,
     );
-    expect(entries.map((entry) => entry.name)).toEqual([
-      'extension/assets/a.js',
-      'extension/manifest.json',
-    ]);
+    expect(entries.map((entry) => entry.name)).toEqual(['assets/a.js', 'manifest.json']);
     expect(entries[1].data.toString('utf8')).toBe('{"version":"1"}');
   });
 
@@ -82,7 +79,7 @@ describe('zipDirectory', () => {
     zipDirectory(source, join(workDir, 'extension.zip'));
     const entries = readZip(readFileSync(join(workDir, 'extension.zip')));
 
-    expect(entries[0].name).toBe('extension/манифест.txt');
+    expect(entries[0].name).toBe('манифест.txt');
     expect(entries[0].data.toString('utf8')).toBe('данные');
   });
 });

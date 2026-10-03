@@ -72,12 +72,12 @@ export interface ZipResult {
 }
 
 /**
- * Пакует содержимое каталога в zip. Сам каталог становится корнем архива:
- * распаковав его, получаешь ту же папку расширения, что и в `dist/`.
+ * Пакует содержимое каталога в zip. Корнем архива становится само содержимое,
+ * без папки-обёртки: распаковка сразу даёт файлы расширения, и её результат
+ * можно указать Chrome как распакованное расширение.
  */
 export function zipDirectory(sourceDir: string, zipPath: string): ZipResult {
-  const rootName = sourceDir.split(/[\\/]/).filter(Boolean).pop() ?? 'extension';
-  const entries = collect(sourceDir, `${rootName}/`);
+  const entries = collect(sourceDir, '');
 
   const body: Buffer[] = [];
   const central: Buffer[] = [];
