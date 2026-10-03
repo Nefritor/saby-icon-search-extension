@@ -2,10 +2,10 @@
   "name": "saby-icon-search",
   "private": true,
   "type": "module",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "author": "Хамитов М. А.",
   "saby-version": "26.5100",
-  "description": "Chrome extension: sketch an icon on a canvas and find the closest glyphs in the fonts you load",
+  "description": "Chrome extension: sketch an saby icon on a canvas and find the closest glyphs in the dictionary",
   "scripts": {
     "build": "npm run typecheck && vite build",
     "build:only": "vite build",
