@@ -483,7 +483,7 @@ export function App() {
           <button
             type="button"
             onClick={handleGrantAccess}
-            className="shrink-0 cursor-pointer rounded-lg bg-amber-500/15 px-2 py-1 text-left text-[10px] leading-tight text-amber-500 ring-1 ring-amber-500/30 transition hover:bg-amber-500/25"
+            className="shrink-0 cursor-pointer rounded-lg bg-amber-500/15 px-2 mb-9 py-1 text-left text-[10px] leading-tight text-amber-500 ring-1 ring-amber-500/30 transition hover:bg-amber-500/25"
           >
             {pendingUrl
               ? `${t('continuePending')} «${pendingUrl.name}» — ${t('needHosts')}`
