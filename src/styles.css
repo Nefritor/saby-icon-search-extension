@@ -1,0 +1,253 @@
+@import '@heroui/styles';
+
+@source './';
+@source '../popup.html';
+
+/*
+ * Своя палитра поверх темы HeroUI: акцент переключается в настройках,
+ * а светлая и тёмная схемы отличаются только этими переменными.
+ * Компоненты ходят в них через `bg-[var(--panel)]`, `text-[var(--muted)]` и так далее,
+ * поэтому смена темы не требует правок в разметке.
+ */
+:root {
+  --accent: #0b96fc;
+
+  --surface: #f4f4f5;
+  --panel: #ffffff;
+  --input: #ffffff;
+  --text: #18181b;
+  --text-2: #3f3f46;
+  --muted: #71717a;
+  --line: rgb(0 0 0 / 0.1);
+  --soft: rgb(0 0 0 / 0.05);
+  --soft-2: rgb(0 0 0 / 0.09);
+  --soft-3: rgb(0 0 0 / 0.14);
+  --scrollbar: rgb(0 0 0 / 0.2);
+  /* Холст светлее фона страницы, поэтому в светлой теме у него серая рамка. */
+  --canvas: #ffffff;
+  --canvas-line: rgb(0 0 0 / 0.28);
+}
+
+.dark {
+  --surface: #09090b;
+  --panel: #18181b;
+  --input: #131316;
+  --text: #fafafa;
+  --text-2: #d4d4d8;
+  --muted: #a1a1aa;
+  --line: rgb(255 255 255 / 0.1);
+  --soft: rgb(255 255 255 / 0.06);
+  --soft-2: rgb(255 255 255 / 0.12);
+  --soft-3: rgb(255 255 255 / 0.2);
+  --scrollbar: rgb(255 255 255 / 0.18);
+  --canvas: #f4f4f5;
+  --canvas-line: rgb(255 255 255 / 0.14);
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+}
+
+/*
+ * Размеры и цвета настоящего popup. Скоуп обязателен: на странице отладочного
+ * стенда эти же правила обрезали бы вьюпорт до 400x580 и увели фрейм за край
+ * экрана, а фон страницы не должен следовать за темой внутри фрейма.
+ * */
+body.popup {
+  width: 400px;
+  height: 580px;
+  overflow: hidden;
+  background: var(--background, var(--surface));
+  color: var(--foreground, var(--text));
+}
+
+.popup-frame {
+  width: 400px;
+  height: 580px;
+  overflow: hidden;
+}
+
+/* Ползунок прокрутки результатов — тонкий и тихий. */
+.thin-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: var(--scrollbar) transparent;
+}
+.thin-scroll::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+.thin-scroll::-webkit-scrollbar-thumb {
+  background: var(--scrollbar);
+  border-radius: 999px;
+}
+.thin-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/*
+ * Вертикальный ползунок толщины кисти. `writing-mode` разворачивает нативный
+ * range-input, `direction: rtl` ставит минимум вниз — так ползунок читается
+ * сверху вниз, как обычная шкала.
+ */
+.brush-slider {
+  writing-mode: vertical-lr;
+  direction: rtl;
+  width: 14px;
+  flex: 1 1 auto;
+  min-height: 60px;
+  margin: 0;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
+/*
+ * Затемнение под панелью настроек: фон за ней размывается, поэтому панель
+ * читается как отдельный слой, а не как ещё одна карточка поверх интерфейса.
+ * Это статичный `backdrop-filter`, а не анимация прозрачности: такому слою
+ * нечем «застыть», в отличие от анимированной opacity на весь popup.
+ */
+.settings-backdrop {
+  backdrop-filter: blur(3px);
+  -webkit-backdrop-filter: blur(3px);
+}
+
+/*
+ * Появление и уход панели настроек.
+ *
+ * Прозрачность здесь не анимируется сознательно. Анимация `opacity` на слое,
+ * который заодно перекрывает весь интерфейс, — единственный способ оставить
+ * расширение в полупрозрачном виде: если браузер приостановит такую анимацию
+ * (достаточно увести курсор и перекрыть окно), на экране застынет кадр
+ * с недорисованной панелью. Поэтому затемнение появляется сразу и целиком,
+ * а карточка только подъезжает — прозрачность у неё всегда 1.
+ *
+ * Панель выезжает сверху из-за края popup: сначала она целиком скрыта за верхней
+ * границей, потом съезжает вниз на своё место. Масштаб не меняется — только сдвиг
+ * на собственную высоту, поэтому выезд одинаково читается у любой высоты панели.
+ */
+@keyframes settings-card-in {
+  from {
+    transform: translateY(-100%);
+  }
+  to {
+    transform: none;
+  }
+}
+
+/* Обратная анимация: панель уходит тем же путём — вверх, за верхний край. */
+@keyframes settings-card-out {
+  from {
+    transform: none;
+  }
+  to {
+    transform: translateY(-100%);
+  }
+}
+
+.settings-card {
+  animation: settings-card-in 240ms cubic-bezier(0.4, 0, 0.2, 1) both;
+}
+
+/*
+ * Длительность закрытия должна совпадать с `CLOSE_ANIM_MS` в SettingsPanel:
+ * родитель размонтирует панель ровно тогда, когда анимация заканчивается.
+ */
+.settings-card-out {
+  animation: settings-card-out 150ms ease-in both;
+}
+
+/*
+ * Карточка сборки живёт внизу панели и выезжает так же — из-за нижнего края,
+ * снизу вверх. Вместе с панелью, идущей навстречу, это читается как раскрытие.
+ */
+@keyframes settings-info-in {
+  from {
+    transform: translateY(100%);
+  }
+  to {
+    transform: none;
+  }
+}
+
+@keyframes settings-info-out {
+  from {
+    transform: none;
+  }
+  to {
+    transform: translateY(100%);
+  }
+}
+
+.settings-info {
+  animation: settings-info-in 240ms cubic-bezier(0.4, 0, 0.2, 1) both;
+}
+
+.settings-info-out {
+  animation: settings-info-out 150ms ease-in both;
+}
+
+/* Раскрытие списка языков: тот же приём — только сдвиг, без прозрачности. */
+@keyframes popover-in {
+  from {
+    transform: translateY(4px) scale(0.97);
+  }
+  to {
+    transform: none;
+  }
+}
+
+.popover-in {
+  animation: popover-in 140ms ease-out both;
+  transform-origin: top right;
+}
+
+/*
+ * Запасной путь смены темы: переходы по цветам. Включается только тогда, когда
+ * браузер не умеет снимки вида, и только на время переключения — если оставить
+ * переходы всегда, они замедлят все hover-эффекты интерфейса.
+ * `transform` и `translate` в списке нужны кружку свитча: Tailwind двигает его
+ * свойством `translate`, и без этого он прыгал бы на новое место.
+ */
+.theme-anim,
+.theme-anim * {
+  transition:
+    background-color 260ms ease,
+    color 260ms ease,
+    border-color 260ms ease,
+    box-shadow 260ms ease,
+    transform 260ms ease,
+    translate 260ms ease !important;
+}
+
+/* Снимки вида: этим путём тему меняет Chrome, длительность задаётся здесь. */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation-duration: 280ms;
+  animation-timing-function: ease;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .settings-card,
+  .settings-info,
+  .popover-in {
+    animation: none;
+  }
+
+  /* Закрытие ждать не нужно: панель убирается сразу, без обратной анимации. */
+  .settings-card-out,
+  .settings-info-out {
+    animation: none;
+  }
+
+  .theme-anim,
+  .theme-anim * {
+    transition: none !important;
+  }
+
+  ::view-transition-old(root),
+  ::view-transition-new(root) {
+    animation-duration: 1ms;
+  }
+}

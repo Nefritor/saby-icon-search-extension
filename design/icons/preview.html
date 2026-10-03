@@ -1,0 +1,172 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <title>Иконка — Saby Icon Search</title>
+    <style>
+      :root {
+        color-scheme: light;
+      }
+      body {
+        margin: 0;
+        padding: 24px;
+        background: #f4f4f5;
+        color: #18181b;
+        font: 13px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif;
+      }
+      h1 {
+        font-size: 18px;
+        margin: 0 0 4px;
+      }
+      h2 {
+        font-size: 14px;
+        margin: 0;
+      }
+      p.note {
+        margin: 0 0 20px;
+        color: #52525b;
+        max-width: 900px;
+      }
+      .card {
+        display: flex;
+        gap: 20px;
+        align-items: flex-start;
+        background: #fff;
+        border: 1px solid #e4e4e7;
+        border-radius: 12px;
+        padding: 16px;
+        margin-bottom: 16px;
+      }
+      .meta {
+        width: 320px;
+        flex: none;
+      }
+      .meta code {
+        font-size: 12px;
+        color: #52525b;
+      }
+      .meta p {
+        margin: 6px 0 0;
+        color: #3f3f46;
+      }
+      .board {
+        display: flex;
+        gap: 16px;
+        align-items: flex-end;
+        flex-wrap: wrap;
+      }
+      .cell {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        align-items: center;
+      }
+      .cell span {
+        font-size: 11px;
+        color: #71717a;
+      }
+      .plate {
+        display: grid;
+        place-items: center;
+        border-radius: 10px;
+        overflow: hidden;
+      }
+      .plate.light {
+        background: #ffffff;
+        box-shadow: inset 0 0 0 1px #e4e4e7;
+      }
+      .plate.dark {
+        background: #26262a;
+        box-shadow: inset 0 0 0 1px #3f3f46;
+      }
+      .plate.zoom img {
+        image-rendering: pixelated;
+      }
+      img.src {
+        max-height: 132px;
+        display: block;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Иконка: набросок, карандаш, «93%» — без рамки</h1>
+    <p class="note">
+      Рамка-контур убрана, процент увеличен в 1.45 раза. Слева светлый вариант, справа — тёмный
+      (цвета инвертированы: тёмная плитка, светлый штрих).
+    </p>
+
+    <div class="card">
+      <div class="meta">
+        <h2>Два варианта</h2>
+        <code>v22.svg / v23.svg</code>
+        <p>Один и тот же контур, разные цвета фона и штриха.</p>
+      </div>
+      <div class="board">
+        <div class="cell">
+          <div class="plate light" style="width: 148px; height: 148px">
+            <img class="src" src="v22.svg" alt="" />
+          </div>
+          <span>v22.svg — светлый</span>
+        </div>
+        <div class="cell">
+          <div class="plate dark" style="width: 148px; height: 148px">
+            <img class="src" src="v23.svg" alt="" />
+          </div>
+          <span>v23.svg — тёмный</span>
+        </div>
+        <div class="cell">
+          <div class="plate light" style="width: 148px; height: 148px">
+            <img class="src" src="ref.png" alt="" />
+          </div>
+          <span>образец</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="meta">
+        <h2>Как встанет в тулбар</h2>
+        <code>v22.svg / v23.svg</code>
+        <p>128 px и мелкие размеры под увеличением — на своей теме каждый вариант.</p>
+      </div>
+      <div class="board">
+        <div class="cell">
+          <div class="plate light" style="width: 132px; height: 132px">
+            <img src="v22.svg" width="128" height="128" alt="" />
+          </div>
+          <span>128, светлая тема</span>
+        </div>
+        <div class="cell">
+          <div class="plate light zoom" style="width: 128px; height: 128px">
+            <img src="v22.svg" width="32" height="32" alt="" />
+          </div>
+          <span>32 ×4</span>
+        </div>
+        <div class="cell">
+          <div class="plate light zoom" style="width: 128px; height: 128px">
+            <img src="v22.svg" width="16" height="16" alt="" />
+          </div>
+          <span>16 ×8</span>
+        </div>
+        <div class="cell">
+          <div class="plate dark" style="width: 132px; height: 132px">
+            <img src="v23.svg" width="128" height="128" alt="" />
+          </div>
+          <span>128, тёмная тема</span>
+        </div>
+        <div class="cell">
+          <div class="plate dark zoom" style="width: 128px; height: 128px">
+            <img src="v23.svg" width="32" height="32" alt="" />
+          </div>
+          <span>32 ×4</span>
+        </div>
+        <div class="cell">
+          <div class="plate dark zoom" style="width: 128px; height: 128px">
+            <img src="v23.svg" width="16" height="16" alt="" />
+          </div>
+          <span>16 ×8</span>
+        </div>
+      </div>
+    </div>
+  </body>
+</html>
