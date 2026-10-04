@@ -548,7 +548,6 @@ export function App() {
             onRefreshFonts={handleRefreshFonts}
             onRefreshStyles={handleRefreshStyles}
             onToggleDebug={handleToggleDebug}
-            onError={setError}
           />
         )}
       </div>

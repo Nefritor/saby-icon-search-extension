@@ -34,11 +34,12 @@ interface Props {
   onRefreshFonts: () => Promise<void>;
   onRefreshStyles: () => Promise<void>;
   onToggleDebug: (value: boolean) => void;
-  onError: (message: string) => void;
 }
 
 /** Длительность закрытия: совпадает с анимациями `.settings-*-out` в styles.css. */
 const CLOSE_ANIM_MS = 150;
+/** Сколько ошибка секции висит на экране, прежде чем убраться сама. */
+const ERROR_TTL_MS = 4000;
 
 /*
  * Кнопки-облачка и поле ввода одни и те же во всех секциях: то, что нажимается,
@@ -54,12 +55,17 @@ const REFRESH_PILL_CLASS =
 /** Облачко-предупреждение: по клику открывается список проблемных имён. */
 const WARNING_PILL_CLASS =
   'cursor-pointer rounded-full bg-amber-500/10 px-2.5 py-[3px] text-left text-[10px] leading-tight text-amber-500 transition hover:bg-amber-500/20';
-/** Подтверждение ссылки: акцентная кнопка, а не галка внутри поля. Появляться/исчезать
- *  она не должна — иначе строка правки дёргает разметку; поэтому неактивна, пока пусто. */
-const SUBMIT_PILL_CLASS =
-  'shrink-0 rounded-full px-2.5 py-[4px] text-center text-[11px] leading-tight transition';
+/** Подтверждение ссылки: живёт внутри поля, поэтому компактная. Появляется только
+ *  вместе с непустой ссылкой — до этого она занимала бы место впустую. */
+const INLINE_SUBMIT_CLASS =
+  'absolute top-1/2 right-[3px] -translate-y-[7px] rounded-[6px] px-2 py-[2px] text-center text-[10px] leading-tight transition disabled:pointer-events-none';
 const INPUT_CLASS =
-  'min-w-0 flex-1 select-text rounded-lg bg-[var(--input)] px-2 py-[3px] text-[11px] text-[var(--text)] outline-none ring-1 ring-[var(--line)] transition placeholder:text-[var(--muted)] focus:ring-[var(--accent)]';
+  'w-full min-w-0 select-text rounded-lg bg-[var(--input)] px-2 py-[3px] text-[11px] text-[var(--text)] outline-none ring-1 transition placeholder:text-[var(--muted)] disabled:opacity-60';
+/** Тон поля ссылки: ошибка красит рамку в красный, пока текст не поправят. */
+const INPUT_TONE = 'ring-[var(--line)] focus:ring-[var(--accent)]';
+const INPUT_TONE_ERROR = 'ring-rose-500 focus:ring-rose-500';
+/** Отступ под кнопку внутри поля: текст ссылки не должен заезжать под неё. */
+const INPUT_WITH_BUTTON = 'pr-[68px]';
 
 function nameFromFile(fileName: string): string {
   const dot = fileName.lastIndexOf('.');
@@ -69,13 +75,13 @@ function nameFromFile(fileName: string): string {
 /**
  * Что вообще можно положить в каждый блок настроек. Список задаёт и фильтр в диалоге
  * выбора файла, и проверку после выбора: фильтр — только подсказка, его обходят через
- * «все файлы». Шрифт иконок — это woff/woff2/eot, словарь стилей — только .less.
+ * «все файлы». Шрифт иконок — это woff/woff2/ttf/eot, словарь стилей — только .less.
  */
 const ACCEPTED: Record<'font' | 'less', { extensions: string[]; error: 'onlyFont' | 'onlyLess' }> =
-  {
-    font: { extensions: ['.woff', '.woff2', '.eot'], error: 'onlyFont' },
-    less: { extensions: ['.less'], error: 'onlyLess' },
-  };
+{
+  font: { extensions: ['.woff', '.woff2', '.ttf', '.eot'], error: 'onlyFont' },
+  less: { extensions: ['.less'], error: 'onlyLess' },
+};
 
 /** Расширение из имени файла или адреса: `icons.woff2?v=3` — это `.woff2`. */
 function extensionOf(value: string): string {
@@ -160,7 +166,6 @@ interface SourceSectionProps {
   warning?: ReactNode;
   /** Прогресс индексации: есть только у блока шрифта. */
   progress?: ProgressPush | null;
-  onError: (message: string) => void;
 }
 
 /**
@@ -187,23 +192,51 @@ function SourceSection({
   onRefresh,
   warning,
   progress,
-  onError,
 }: SourceSectionProps) {
   const t = useT();
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [editing, setEditing] = useState(false);
   const [url, setUrl] = useState('');
   const [working, setWorking] = useState(false);
+  /** Ошибка секции: показывается рядом с ней и гаснет сама, чтобы не висеть на главной. */
+  const [error, setError] = useState<string | null>(null);
+  /** Ошибка относится к полю ссылки — тогда краснеет и рамка поля. */
+  const [linkError, setLinkError] = useState(false);
+  const errorTimer = useRef<number | null>(null);
   const accept = ACCEPTED[pendingKind];
 
-  const run = async (action: () => Promise<void>) => {
+  const clearError = () => {
+    if (errorTimer.current !== null) {
+      window.clearTimeout(errorTimer.current);
+      errorTimer.current = null;
+    }
+    setError(null);
+    setLinkError(false);
+  };
+
+  const showError = (message: string, markLink = false) => {
+    if (errorTimer.current !== null) window.clearTimeout(errorTimer.current);
+    setError(message);
+    setLinkError(markLink);
+    errorTimer.current = window.setTimeout(clearError, ERROR_TTL_MS);
+  };
+
+  useEffect(
+    () => () => {
+      if (errorTimer.current !== null) window.clearTimeout(errorTimer.current);
+    },
+    [],
+  );
+
+  const run = async (action: () => Promise<void>, markLink = false) => {
     setWorking(true);
+    clearError();
     try {
       await action();
       setEditing(false);
       setUrl('');
-    } catch (error) {
-      onError(errorMessage(error));
+    } catch (caught) {
+      showError(errorMessage(caught), markLink);
     } finally {
       setWorking(false);
     }
@@ -211,9 +244,9 @@ function SourceSection({
 
   // Файл грузится сразу: отдельный шаг «Добавить» здесь лишний.
   const handleFile = (file: File | null) => {
-    if (!file) return;
+    if (!file || working) return;
     if (!accept.extensions.includes(extensionOf(file.name))) {
-      onError(t(accept.error));
+      showError(t(accept.error));
       return;
     }
     void run(() => onAddFile(file, nameFromFile(file.name)));
@@ -221,20 +254,25 @@ function SourceSection({
 
   const submitUrl = () => {
     const trimmed = url.trim();
-    if (trimmed === '') return;
+    if (trimmed === '' || working) return;
     // У ссылки расширения может и не быть: адрес без хвоста отдаём движку,
     // а вот чужое расширение (например, страница .html) отсекаем сразу.
     const extension = extensionOf(trimmed);
     if (extension !== '' && !accept.extensions.includes(extension)) {
-      onError(t(accept.error));
+      showError(t(accept.error), true);
       return;
     }
-    void run(() =>
-      withHostAccess(pendingKind, nameFromUrl(trimmed), trimmed, hostAccess, onAddUrl),
+    void run(
+      () => withHostAccess(pendingKind, nameFromUrl(trimmed), trimmed, hostAccess, onAddUrl),
+      true,
     );
   };
 
-  const ready = url.trim() !== '';
+  /** Ссылка непустая: до этого кнопки «Добавить» в поле нет. */
+  const hasLink = url.trim() !== '';
+  // Пока добавление не завершилось, правку не трогаем: иначе легко отправить
+  // второй файл или ссылку поверх ещё не законченной индексации.
+  const canSubmit = hasLink && !working;
 
   return (
     <section className="space-y-1.5">
@@ -259,11 +297,21 @@ function SourceSection({
 
         <div className="flex shrink-0 items-center gap-1.5">
           {editing ? (
-            <button type="button" className={PILL_CLASS} onClick={() => setEditing(false)}>
+            <button
+              type="button"
+              className={`${PILL_CLASS} disabled:pointer-events-none disabled:opacity-50`}
+              onClick={() => setEditing(false)}
+              disabled={working}
+            >
               {t('cancel')}
             </button>
           ) : (
-            <button type="button" className={PILL_CLASS} onClick={() => setEditing(true)}>
+            <button
+              type="button"
+              className={`${PILL_CLASS} disabled:pointer-events-none disabled:opacity-50`}
+              onClick={() => setEditing(true)}
+              disabled={working}
+            >
               {t('add')}
             </button>
           )}
@@ -360,6 +408,7 @@ function SourceSection({
               type="file"
               accept={accept.extensions.join(',')}
               className="hidden"
+              disabled={working}
               onChange={(event) => {
                 handleFile(event.target.files?.[0] ?? null);
                 event.target.value = '';
@@ -368,36 +417,47 @@ function SourceSection({
 
             <span className="shrink-0 text-[11px] text-[var(--muted)]">{t('link')}</span>
 
-            <input
-              className={INPUT_CLASS}
-              value={url}
-              placeholder={urlPlaceholder}
-              onChange={(event) => setUrl(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key === 'Enter') submitUrl();
-              }}
-            />
+            {/* Кнопка добавления — внутри поля, а не столбцом рядом: так она не отнимает
+                ширину у ссылки и не висит впустую, пока ссылку не ввели. */}
+            <div className="relative min-w-0 flex-1">
+              <input
+                className={`${INPUT_CLASS} ${hasLink ? INPUT_WITH_BUTTON : ''} ${linkError ? INPUT_TONE_ERROR : INPUT_TONE
+                  }`}
+                value={url}
+                placeholder={urlPlaceholder}
+                disabled={working}
+                onChange={(event) => {
+                  setUrl(event.target.value);
+                  if (linkError) clearError();
+                }}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter') submitUrl();
+                }}
+              />
 
-            <button
-              type="button"
-              onClick={submitUrl}
-              disabled={!ready}
-              title={t('addByUrl')}
-              className={`${SUBMIT_PILL_CLASS} ${
-                ready
-                  ? 'cursor-pointer bg-[var(--accent)] font-medium text-white hover:brightness-110'
-                  : 'cursor-default bg-[var(--soft-2)] text-[var(--muted)]'
-              }`}
-            >
-              {t('add')}
-            </button>
+              {hasLink && (
+                <button
+                  type="button"
+                  onClick={submitUrl}
+                  disabled={working}
+                  title={t('addByUrl')}
+                  className={`${INLINE_SUBMIT_CLASS} ${canSubmit
+                    ? 'cursor-pointer bg-[var(--accent)] font-medium text-white hover:brightness-110'
+                    : 'cursor-default bg-[var(--soft-2)] text-[var(--muted)]'
+                    }`}
+                >
+                  {t('add')}
+                </button>
+              )}
+            </div>
 
             <span className="shrink-0 text-[11px] text-[var(--muted)]">{t('or')}</span>
 
             <button
               type="button"
-              className={`${PILL_CLASS} flex items-center gap-1.5`}
+              className={`${PILL_CLASS} flex items-center gap-1.5 disabled:pointer-events-none disabled:opacity-50`}
               onClick={() => fileInputRef.current?.click()}
+              disabled={working}
             >
               <FileIcon />
               {fileHint}
@@ -405,6 +465,10 @@ function SourceSection({
           </div>
         )}
       </div>
+
+      {/* Ошибка секции живёт рядом с ней и гаснет сама: на главной странице она
+          оставалась висеть, а исправлять её нужно именно здесь. */}
+      {error && <p className="text-[10px] leading-tight text-rose-400">{error}</p>}
 
       {warning && <div className="flex flex-wrap gap-1">{warning}</div>}
 
@@ -507,7 +571,6 @@ export function SettingsPanel({
   onRefreshFonts,
   onRefreshStyles,
   onToggleDebug,
-  onError,
 }: Props) {
   const t = useT();
   const [closing, setClosing] = useState(false);
@@ -648,7 +711,6 @@ export function SettingsPanel({
             onRemoveExtra={onRemoveStyle}
             onRefresh={onRefreshStyles}
             warning={glyphWarning}
-            onError={onError}
           />
 
           <div className="h-px bg-[var(--line)]" />
@@ -668,7 +730,6 @@ export function SettingsPanel({
             onRemoveExtra={onRemoveFont}
             onRefresh={onRefreshFonts}
             progress={progress}
-            onError={onError}
           />
 
           <div className="h-px bg-[var(--line)]" />
