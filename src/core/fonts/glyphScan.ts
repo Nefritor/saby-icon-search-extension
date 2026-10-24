@@ -159,10 +159,7 @@ async function scanOnce(
       // Сканирование идёт тысячи шагов подряд: без выхода в событийный цикл поток
       // не отвечает ни на поиск, ни на интерфейс, пока не закончится весь индекс.
       stepsSinceYield += 1;
-      if (
-        stepsSinceYield >= YIELD_EVERY_STEPS ||
-        performance.now() - lastYield >= YIELD_EVERY_MS
-      ) {
+      if (stepsSinceYield >= YIELD_EVERY_STEPS || performance.now() - lastYield >= YIELD_EVERY_MS) {
         await yieldToEventLoop();
         stepsSinceYield = 0;
         lastYield = performance.now();
@@ -181,10 +178,7 @@ async function scanOnce(
  * Асинхронный и кооперативный: отдаёт поток между порциями работы, поэтому
  * индексация не блокирует интерфейс и не задерживает ответы движка.
  */
-export async function scanFont(
-  family: string,
-  options: ScanOptions = {},
-): Promise<ScannedGlyph[]> {
+export async function scanFont(family: string, options: ScanOptions = {}): Promise<ScannedGlyph[]> {
   if (coverageCheckIsReliable(family)) {
     const fast = await scanOnce(family, true, options);
     if (fast.length > 0) return fast;

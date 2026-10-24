@@ -52,3 +52,56 @@ export function distanceTransform(mask: Uint8Array, width: number, height: numbe
 export function toPixels(value: number): number {
   return value / ORTHOGONAL;
 }
+
+/**
+ * Distance transform, который заодно переносит метку ближайшей точки: для каждого пикселя
+ * `label[i]` — метка того «чернильного» пикселя, до которого расстояние минимально.
+ * Нужен chamfer'у с ориентацией: ему важно, какое направление у ближайшей линии.
+ */
+export function distanceTransformLabelled(
+  mask: Uint8Array,
+  labels: Uint8Array,
+  width: number,
+  height: number,
+): { distance: Uint16Array; nearest: Uint8Array } {
+  const size = width * height;
+  const distance = new Uint16Array(size);
+  const nearest = new Uint8Array(size);
+
+  for (let i = 0; i < size; i += 1) {
+    distance[i] = mask[i] ? 0 : INF;
+    nearest[i] = mask[i] ? labels[i] : 0;
+  }
+
+  const relax = (index: number, from: number, step: number): void => {
+    const candidate = distance[from] + step;
+    if (candidate < distance[index]) {
+      distance[index] = candidate;
+      nearest[index] = nearest[from];
+    }
+  };
+
+  for (let y = 0; y < height; y += 1) {
+    for (let x = 0; x < width; x += 1) {
+      const index = y * width + x;
+      if (distance[index] === 0) continue;
+      if (x > 0) relax(index, index - 1, ORTHOGONAL);
+      if (y > 0) relax(index, index - width, ORTHOGONAL);
+      if (x > 0 && y > 0) relax(index, index - width - 1, DIAGONAL);
+      if (x < width - 1 && y > 0) relax(index, index - width + 1, DIAGONAL);
+    }
+  }
+
+  for (let y = height - 1; y >= 0; y -= 1) {
+    for (let x = width - 1; x >= 0; x -= 1) {
+      const index = y * width + x;
+      if (distance[index] === 0) continue;
+      if (x < width - 1) relax(index, index + 1, ORTHOGONAL);
+      if (y < height - 1) relax(index, index + width, ORTHOGONAL);
+      if (x < width - 1 && y < height - 1) relax(index, index + width + 1, DIAGONAL);
+      if (x > 0 && y < height - 1) relax(index, index + width - 1, DIAGONAL);
+    }
+  }
+
+  return { distance, nearest };
+}

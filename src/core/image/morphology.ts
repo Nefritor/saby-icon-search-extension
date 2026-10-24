@@ -121,3 +121,55 @@ export function estimateStrokeWidth(src: Uint8Array, width: number, height: numb
   if (ink === 0 || edgeCount === 0) return 1;
   return Math.max(1, (2 * ink) / edgeCount);
 }
+
+/**
+ * Топология маски: сколько связных кусков чернил (8-связность) и сколько в них дырок
+ * (области фона, не достающие до края кадра, 4-связность). «Кольцо» и «пятно» близки
+ * по силуэту, но различаются именно этим.
+ */
+export function topology(src: Uint8Array, size: number): { components: number; holes: number } {
+  const seen = new Uint8Array(src.length);
+  const stack = new Int32Array(src.length);
+
+  const flood = (start: number, value: number, diagonal: boolean): boolean => {
+    let top = 0;
+    let touchesEdge = false;
+    stack[top] = start;
+    top += 1;
+    seen[start] = 1;
+    while (top > 0) {
+      top -= 1;
+      const index = stack[top];
+      const x = index % size;
+      const y = (index - x) / size;
+      if (x === 0 || y === 0 || x === size - 1 || y === size - 1) touchesEdge = true;
+      for (let dy = -1; dy <= 1; dy += 1) {
+        for (let dx = -1; dx <= 1; dx += 1) {
+          if ((dx === 0 && dy === 0) || (!diagonal && dx !== 0 && dy !== 0)) continue;
+          const nx = x + dx;
+          const ny = y + dy;
+          if (nx < 0 || ny < 0 || nx >= size || ny >= size) continue;
+          const next = ny * size + nx;
+          if (seen[next] || src[next] !== value) continue;
+          seen[next] = 1;
+          stack[top] = next;
+          top += 1;
+        }
+      }
+    }
+    return touchesEdge;
+  };
+
+  let components = 0;
+  let holes = 0;
+  for (let i = 0; i < src.length; i += 1) {
+    if (seen[i]) continue;
+    if (src[i] === 1) {
+      flood(i, 1, true);
+      components += 1;
+    } else if (!flood(i, 0, false)) {
+      holes += 1;
+    }
+  }
+  return { components, holes };
+}

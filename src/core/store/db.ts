@@ -120,14 +120,3 @@ export async function getIconMap(): Promise<IconEntry[]> {
   const db = await getDb();
   return db.getAll('icons');
 }
-
-export async function clearIconMap(): Promise<void> {
-  const db = await getDb();
-  await db.clear('icons');
-}
-
-export async function clearAll(): Promise<void> {
-  const db = await getDb();
-  await db.clear('glyphs');
-  await db.clear('fonts');
-}

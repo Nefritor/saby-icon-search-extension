@@ -96,6 +96,8 @@ export interface GlyphMetrics {
   normContour: number;
   /** Косинус HOG, 0..1. */
   hogSimilarity: number;
+  /** Признаки обученного ранжирования (см. RANK_FEATURES в matcher). */
+  features?: number[];
 }
 
 export interface SearchResult {
