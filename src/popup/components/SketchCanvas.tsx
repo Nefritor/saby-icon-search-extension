@@ -32,7 +32,7 @@ export interface HistoryState {
   canRedo: boolean;
 }
 
-type Tool = 'brush' | 'fill';
+type Tool = 'brush' | 'eraser' | 'fill';
 
 /**
  * Итог заливки. `ink` — щелчок пришёлся на сам штрих, `edge` — область дошла
@@ -40,15 +40,26 @@ type Tool = 'brush' | 'fill';
  */
 type FillOutcome = 'filled' | 'ink' | 'edge';
 
+/**
+ * Внутренний размер холста. Движок рассчитан на масштаб именно такой ширины (толщина кисти
+ * 4 px → 1,6 px в растре 128×128), поэтому на экране холст только растягивается по CSS,
+ * а его размер в пикселях остаётся прежним.
+ */
 const CANVAS_WIDTH = 324;
-/** Высота задаёт и высоту столбика инструментов: чем выше холст, тем длиннее ползунок. */
-const CANVAS_HEIGHT = 226;
+const CANVAS_HEIGHT = 170;
 const STROKE_RGB = [24, 24, 27] as const;
 const STROKE_COLOR = `rgb(${STROKE_RGB[0]}, ${STROKE_RGB[1]}, ${STROKE_RGB[2]})`;
 /** Минимум — прежняя толщина, максимум — в пять раз больше. */
 const BRUSH_MIN = 4;
 const BRUSH_MAX = BRUSH_MIN * 5;
 const STORAGE_KEY = 'last-sketch';
+/**
+ * Сглаживание штриха: доля пути, на которую кисть отстаёт от курсора (как «стабилизация»
+ * в Fresco или Procreate). Режим один — сильный: дрожащая рука не ломает форму.
+ */
+const SMOOTHING = 0.75;
+/** Ластик шире кисти: стирать узкой линией неудобно. */
+const ERASER_SCALE = 1.6;
 const SEARCH_DELAY = 320;
 const SAVE_DELAY = 500;
 /** Пиксель считается чернилами, если он хотя бы чуть темнее фона холста. */
@@ -98,6 +109,26 @@ function BrushIcon() {
     >
       <path d="M5.5 18.5 6.8 14 17.6 3.2a1.9 1.9 0 0 1 2.7 0l.5.5a1.9 1.9 0 0 1 0 2.7L10 17.2l-4.5 1.3Z" />
       <path d="m15.9 4.9 3.2 3.2" />
+    </svg>
+  );
+}
+
+/** Ластик: скошенный брусок с линией стирания. */
+function EraserIcon() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      width="18"
+      height="18"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="m7 21-4-4a2 2 0 0 1 0-2.8l10.2-10.2a2 2 0 0 1 2.8 0l4.2 4.2a2 2 0 0 1 0 2.8L11 21" />
+      <path d="M7 21h13M9 9l6 6" />
     </svg>
   );
 }
@@ -223,7 +254,10 @@ export const SketchCanvas = forwardRef<SketchHandle, Props>(function SketchCanva
   ref,
 ) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const lastPoint = useRef<{ x: number; y: number } | null>(null);
+  /** Сглаженное положение кисти и середина последнего отрезка: по ним строятся кривые. */
+  const smoothed = useRef<{ x: number; y: number } | null>(null);
+  const lastMid = useRef<{ x: number; y: number } | null>(null);
+  const cursorRef = useRef<HTMLDivElement | null>(null);
   const drawing = useRef(false);
   const hasInk = useRef(false);
   const searchTimer = useRef<number | null>(null);
@@ -243,10 +277,15 @@ export const SketchCanvas = forwardRef<SketchHandle, Props>(function SketchCanva
     const canvas = canvasRef.current;
     const context = canvas?.getContext('2d', { willReadFrequently: true });
     if (!canvas || !context) return null;
-    return {
-      image: context.getImageData(0, 0, canvas.width, canvas.height),
-      hasInk: hasInk.current,
-    };
+    try {
+      return {
+        image: context.getImageData(0, 0, canvas.width, canvas.height),
+        hasInk: hasInk.current,
+      };
+    } catch {
+      // Снимок нужен только для отмены: сбой чтения не должен ломать рисование.
+      return null;
+    }
   }, []);
 
   const emitHistory = useCallback(() => {
@@ -276,11 +315,12 @@ export const SketchCanvas = forwardRef<SketchHandle, Props>(function SketchCanva
 
   const applyEntry = useCallback((entry: HistoryEntry) => {
     const canvas = canvasRef.current;
-    const context = canvas?.getContext('2d');
+    const context = canvas?.getContext('2d', { willReadFrequently: true });
     if (!canvas || !context) return;
     context.putImageData(entry.image, 0, 0);
     hasInk.current = entry.hasInk;
-    lastPoint.current = null;
+    smoothed.current = null;
+    lastMid.current = null;
     drawing.current = false;
   }, []);
 
@@ -368,12 +408,13 @@ export const SketchCanvas = forwardRef<SketchHandle, Props>(function SketchCanva
     () => ({
       clear() {
         const canvas = canvasRef.current;
-        const context = canvas?.getContext('2d');
+        const context = canvas?.getContext('2d', { willReadFrequently: true });
         if (!canvas || !context) return;
         const wasEmpty = !hasInk.current;
         context.clearRect(0, 0, canvas.width, canvas.height);
         hasInk.current = false;
-        lastPoint.current = null;
+        smoothed.current = null;
+        lastMid.current = null;
         void removeLocal(STORAGE_KEY);
         callbacks.current.onEmpty();
         // Стирание — тоже шаг истории: рисунок возвращается кнопкой «вернуть».
@@ -397,7 +438,7 @@ export const SketchCanvas = forwardRef<SketchHandle, Props>(function SketchCanva
 
       const image = new Image();
       image.onload = () => {
-        const context = canvas.getContext('2d');
+        const context = canvas.getContext('2d', { willReadFrequently: true });
         if (!context) return;
         // Только уменьшаем: если сохранённый снимок меньше холста (например, canvas
         // был другого размера), растягивать его нельзя — штрихи распухают.
@@ -427,6 +468,33 @@ export const SketchCanvas = forwardRef<SketchHandle, Props>(function SketchCanva
     [],
   );
 
+  // Горячие клавиши: Ctrl+Z / Ctrl+Shift+Z / Ctrl+Y — история, B / E / F — инструменты.
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      const target = event.target as HTMLElement | null;
+      if (target && /^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName)) return;
+
+      const key = event.key.toLowerCase();
+      const code = event.code;
+      if (event.ctrlKey || event.metaKey) {
+        if (code === 'KeyZ') {
+          event.preventDefault();
+          step(event.shiftKey ? 1 : -1);
+        } else if (code === 'KeyY') {
+          event.preventDefault();
+          step(1);
+        }
+        return;
+      }
+      if (event.altKey) return;
+      if (code === 'KeyB' || key === 'b') setTool('brush');
+      else if (code === 'KeyE' || key === 'e') setTool('eraser');
+      else if (code === 'KeyF' || key === 'f') setTool('fill');
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [step]);
+
   const pointFromEvent = (event: ReactPointerEvent<HTMLCanvasElement>) => {
     const canvas = event.currentTarget;
     const rect = canvas.getBoundingClientRect();
@@ -436,7 +504,30 @@ export const SketchCanvas = forwardRef<SketchHandle, Props>(function SketchCanva
     };
   };
 
+  /** Реальная толщина текущего инструмента, px холста. */
+  const strokeWidth = tool === 'eraser' ? brushWidth * ERASER_SCALE : brushWidth;
+
+  /** Кольцо-превью повторяет толщину кисти или ластика прямо под курсором. */
+  const moveCursor = (event: ReactPointerEvent<HTMLCanvasElement>) => {
+    const ring = cursorRef.current;
+    if (!ring) return;
+    const rect = event.currentTarget.getBoundingClientRect();
+    const diameter = strokeWidth * (rect.width / event.currentTarget.width);
+    ring.style.width = `${diameter}px`;
+    ring.style.height = `${diameter}px`;
+    ring.style.transform = `translate(${event.clientX - rect.left - diameter / 2}px, ${
+      event.clientY - rect.top - diameter / 2
+    }px)`;
+    ring.style.opacity = '1';
+  };
+
+  const hideCursor = () => {
+    if (cursorRef.current) cursorRef.current.style.opacity = '0';
+  };
+
   const handlePointerDown = (event: ReactPointerEvent<HTMLCanvasElement>) => {
+    // Рисуем только основной кнопкой: правый клик вызывал контекстное меню и оставлял точку.
+    if (event.pointerType === 'mouse' && event.button !== 0) return;
     const point = pointFromEvent(event);
 
     if (tool === 'fill') {
@@ -454,89 +545,140 @@ export const SketchCanvas = forwardRef<SketchHandle, Props>(function SketchCanva
     }
 
     event.currentTarget.setPointerCapture(event.pointerId);
-    const context = event.currentTarget.getContext('2d');
+    const context = event.currentTarget.getContext('2d', { willReadFrequently: true });
     drawing.current = true;
-    lastPoint.current = point;
+    smoothed.current = point;
+    lastMid.current = point;
     hasInk.current = true;
     if (!context) return;
+    context.globalCompositeOperation = tool === 'eraser' ? 'destination-out' : 'source-over';
     context.fillStyle = STROKE_COLOR;
     context.beginPath();
-    context.arc(point.x, point.y, brushWidth / 2, 0, Math.PI * 2);
+    context.arc(point.x, point.y, strokeWidth / 2, 0, Math.PI * 2);
     context.fill();
   };
 
-  const handlePointerMove = (event: ReactPointerEvent<HTMLCanvasElement>) => {
-    if (!drawing.current) return;
-    const context = event.currentTarget.getContext('2d');
-    if (!context) return;
-    const point = pointFromEvent(event);
-    const previous = lastPoint.current ?? point;
+  /** Один шаг штриха: кривая от прошлой середины к новой, а прошлая точка — опорная. */
+  const strokeTo = (context: CanvasRenderingContext2D, target: { x: number; y: number }) => {
+    const previous = smoothed.current;
+    const from = lastMid.current;
+    if (!previous || !from) return;
+
+    const follow = 1 - SMOOTHING;
+    const next = {
+      x: previous.x + (target.x - previous.x) * follow,
+      y: previous.y + (target.y - previous.y) * follow,
+    };
+    const mid = { x: (previous.x + next.x) / 2, y: (previous.y + next.y) / 2 };
+
+    context.globalCompositeOperation = tool === 'eraser' ? 'destination-out' : 'source-over';
     context.strokeStyle = STROKE_COLOR;
-    context.lineWidth = brushWidth;
+    context.lineWidth = strokeWidth;
     context.lineCap = 'round';
     context.lineJoin = 'round';
     context.beginPath();
-    context.moveTo(previous.x, previous.y);
-    context.lineTo(point.x, point.y);
+    context.moveTo(from.x, from.y);
+    context.quadraticCurveTo(previous.x, previous.y, mid.x, mid.y);
     context.stroke();
-    lastPoint.current = point;
+
+    smoothed.current = next;
+    lastMid.current = mid;
   };
 
-  const handlePointerUp = () => {
+  const handlePointerMove = (event: ReactPointerEvent<HTMLCanvasElement>) => {
+    moveCursor(event);
+    if (!drawing.current) return;
+    const context = event.currentTarget.getContext('2d', { willReadFrequently: true });
+    if (!context) return;
+    // Браузер склеивает быстрые движения в одно событие: берём все промежуточные точки,
+    // иначе при быстром рисовании линия превращалась бы в ломаную.
+    const native = event.nativeEvent;
+    const batch =
+      typeof native.getCoalescedEvents === 'function' ? native.getCoalescedEvents() : [];
+    const events = batch.length > 0 ? batch : [native];
+    const canvas = event.currentTarget;
+    const rect = canvas.getBoundingClientRect();
+    for (const item of events) {
+      strokeTo(context, {
+        x: ((item.clientX - rect.left) / rect.width) * canvas.width,
+        y: ((item.clientY - rect.top) / rect.height) * canvas.height,
+      });
+    }
+  };
+
+  const handlePointerUp = (event?: ReactPointerEvent<HTMLCanvasElement>) => {
     if (!drawing.current) return;
     drawing.current = false;
-    lastPoint.current = null;
+
+    // Кисть отстаёт от курсора: на отпускании дотягиваем линию до последней точки.
+    if (event && smoothed.current) {
+      const canvas = event.currentTarget;
+      const context = canvas.getContext('2d', { willReadFrequently: true });
+      const rect = canvas.getBoundingClientRect();
+      const end = {
+        x: ((event.clientX - rect.left) / rect.width) * canvas.width,
+        y: ((event.clientY - rect.top) / rect.height) * canvas.height,
+      };
+      if (context) {
+        for (let i = 0; i < 12; i += 1) strokeTo(context, end);
+        const last = lastMid.current;
+        if (last) {
+          context.beginPath();
+          context.moveTo(last.x, last.y);
+          context.lineTo(end.x, end.y);
+          context.stroke();
+        }
+      }
+    }
+
+    smoothed.current = null;
+    lastMid.current = null;
     commit();
     scheduleSearch();
     scheduleSave();
   };
 
   const toolClass = (active: boolean): string =>
-    `flex h-9 w-9 cursor-pointer items-center justify-center rounded-xl transition ${
+    `flex h-8 w-8 cursor-pointer items-center justify-center rounded-full transition ${
       active
-        ? 'bg-[var(--accent)] text-white'
-        : 'bg-[var(--soft-2)] text-[var(--text-2)] hover:bg-[var(--soft-3)] hover:text-[var(--text)]'
+        ? 'glass-pill text-[var(--text)]'
+        : 'text-[var(--muted)] hover:bg-[var(--soft-2)] hover:text-[var(--text)]'
     }`;
 
   return (
-    <div className="flex shrink-0 items-stretch gap-2">
-      {/* Столбик инструментов ровно той же высоты, что и холст: иначе ползунок
-          и кружок толщины уезжают ниже края канвы. */}
-      <div
-        className="flex w-9 shrink-0 flex-col items-center gap-1.5"
-        style={{ height: CANVAS_HEIGHT }}
-      >
+    <div className="flex shrink-0 flex-col gap-2">
+      <div className="flex h-8 items-center gap-0.5">
         <button
           type="button"
           className={toolClass(tool === 'brush')}
           onClick={() => setTool('brush')}
           aria-label={t('brush')}
-          title={t('brush')}
+          title={`${t('brush')} (B)`}
         >
           <BrushIcon />
+        </button>
+        <button
+          type="button"
+          className={toolClass(tool === 'eraser')}
+          onClick={() => setTool('eraser')}
+          aria-label={t('eraser')}
+          title={`${t('eraser')} (E)`}
+        >
+          <EraserIcon />
         </button>
         <button
           type="button"
           className={toolClass(tool === 'fill')}
           onClick={() => setTool('fill')}
           aria-label={t('fill')}
-          title={t('fill')}
+          title={`${t('fill')} (F)`}
         >
           <RollerIcon />
         </button>
 
-        {/* Толщина нужна только кисти: заливка заливает область целиком. */}
-        {tool === 'brush' && (
-          <div className="flex min-h-0 w-full flex-1 flex-col items-center gap-2 pt-1">
-            {/* Слот фиксированной высоты: кружок растёт внутри него и не сдвигает
-                ползунок — иначе при увеличении толщины ползунок становится короче. */}
-            <span className="flex h-6 w-full shrink-0 items-center justify-center">
-              {/* Кружок — ровно та толщина, которой рисует кисть: 1 px канвы = 1 px экрана. */}
-              <span
-                className="rounded-full bg-[var(--text-2)]"
-                style={{ width: brushWidth, height: brushWidth }}
-              />
-            </span>
+        {/* Толщина нужна кисти и ластику: заливка заливает область целиком. */}
+        {tool !== 'fill' && (
+          <div className="ml-3 flex min-w-0 flex-1 items-center gap-3">
             <input
               type="range"
               min={BRUSH_MIN}
@@ -547,13 +689,19 @@ export const SketchCanvas = forwardRef<SketchHandle, Props>(function SketchCanva
               className="brush-slider"
               aria-label={t('brushWidth')}
             />
+            <span className="flex h-5 w-5 shrink-0 items-center justify-center">
+              <span
+                className="rounded-full bg-[var(--text-2)]"
+                style={{ width: strokeWidth, height: strokeWidth }}
+              />
+            </span>
           </div>
         )}
       </div>
 
       {/* Холст и его подсказка — одна относительная коробка: угол подсказки
-          считается от кромки холста, а не от всей строки с инструментами. */}
-      <div className="relative shrink-0">
+          считается от кромки холста. */}
+      <div className="relative">
         <canvas
           ref={canvasRef}
           width={CANVAS_WIDTH}
@@ -561,16 +709,30 @@ export const SketchCanvas = forwardRef<SketchHandle, Props>(function SketchCanva
           onPointerDown={handlePointerDown}
           onPointerMove={handlePointerMove}
           onPointerUp={handlePointerUp}
-          onPointerCancel={handlePointerUp}
-          onPointerLeave={handlePointerUp}
-          className={`block shrink-0 touch-none rounded-xl bg-[var(--canvas)] ring-1 ring-[var(--canvas-line)] ${
-            tool === 'fill' ? 'cursor-copy' : 'cursor-crosshair'
+          onPointerCancel={() => handlePointerUp()}
+          onPointerLeave={() => {
+            hideCursor();
+            handlePointerUp();
+          }}
+          onContextMenu={(event) => event.preventDefault()}
+          className={`block w-full touch-none rounded-3xl border border-[var(--canvas-line)] bg-[var(--canvas)] shadow-[inset_0_1px_0_rgb(255_255_255/0.9),0_14px_30px_-16px_rgb(0_0_0/0.55)] ${
+            tool === 'fill' ? 'cursor-copy' : 'cursor-none'
           }`}
-          style={{ width: CANVAS_WIDTH, height: CANVAS_HEIGHT }}
+          style={{ aspectRatio: `${CANVAS_WIDTH} / ${CANVAS_HEIGHT}` }}
         />
 
-        {/* Холст светлый в обеих темах, поэтому подсказка — тёмная плашка: янтарный
-            текст на белом холсте не читался, а тут виден с любого фона. */}
+        {/* Кольцо-превью: диаметр равен толщине кисти (у ластика — пунктир). */}
+        {tool !== 'fill' && (
+          <div
+            ref={cursorRef}
+            aria-hidden="true"
+            className={`pointer-events-none absolute top-0 left-0 rounded-full border border-zinc-900/70 opacity-0 transition-opacity duration-100 ${
+              tool === 'eraser' ? 'border-dashed bg-white/40' : 'bg-zinc-900/10'
+            }`}
+          />
+        )}
+
+        {/* Холст светлый в обеих темах, поэтому подсказка — тёмная плашка. */}
         {hint && (
           <p
             role="status"

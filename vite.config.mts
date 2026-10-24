@@ -1,4 +1,4 @@
-import { mkdirSync, readdirSync, readFileSync, renameSync, rmSync } from 'node:fs';
+import { mkdirSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import tailwindcss from '@tailwindcss/vite';
 import { defineConfig, type Plugin } from 'vite';
@@ -24,6 +24,18 @@ function releasePackage(): Plugin {
     apply: 'build',
     closeBundle() {
       const dist = resolve(root, 'dist');
+
+      // Версия живёт в одном месте — package.json. В манифест она попадает при сборке,
+      // и забыть поднять её во втором файле (как было с 1.0.0) больше нельзя.
+      const manifestPath = resolve(dist, 'manifest.json');
+      const manifest = JSON.parse(readFileSync(manifestPath, 'utf8')) as { version: string };
+      manifest.version = pkg.version;
+      writeFileSync(
+        manifestPath,
+        `${JSON.stringify(manifest, null, 2)}
+`,
+      );
+
       const folder = resolve(dist, RELEASE_NAME);
       mkdirSync(folder, { recursive: true });
 
@@ -66,6 +78,7 @@ export default defineConfig({
     __APP_VERSION__: JSON.stringify(pkg.version),
     __SABY_VERSION__: JSON.stringify(pkg['saby-version']),
   },
+  worker: { format: 'es' },
   server: {
     port: 5173,
     // `npm run dev` должен сам собрать стенд и открыть его в браузере.
@@ -81,6 +94,7 @@ export default defineConfig({
       input: {
         popup: resolve(root, 'popup.html'),
         offscreen: resolve(root, 'offscreen.html'),
+        update: resolve(root, 'update.html'),
         'service-worker': resolve(root, 'src/background/service-worker.ts'),
       },
       output: {

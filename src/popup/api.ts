@@ -29,7 +29,6 @@ if (!hasTransport()) setTransport(chromeTransport);
 const PENDING_URL_KEY = 'pending-url-request';
 const LESS_SOURCE_KEY = 'less-source';
 const STYLES_KEY = 'icon-styles';
-const SHOW_DEBUG_KEY = 'show-debug-metrics';
 const DEFAULTS_FLAG_KEY = 'bundled-defaults-installed';
 
 /**
@@ -541,10 +540,6 @@ export async function installBundledDefaults(): Promise<boolean> {
   return changed;
 }
 
-export async function getShowDebug(): Promise<boolean> {
-  return (await getLocal<boolean>(SHOW_DEBUG_KEY)) ?? false;
-}
-
 /** Пересобирает индекс шрифтов, разобранных старой версией сканера. */
 export async function reindexOutdatedFonts(): Promise<number> {
   await ensureEngine();
@@ -555,10 +550,6 @@ export async function reindexOutdatedFonts(): Promise<number> {
     }),
   );
   return response.reindexed;
-}
-
-export async function setShowDebug(value: boolean): Promise<void> {
-  await setLocal(SHOW_DEBUG_KEY, value);
 }
 
 /* ------------------------------------------------------------------ */
@@ -581,6 +572,15 @@ export function isFontsChangedPush(message: unknown): message is FontsChangedPus
     (message as { target?: unknown }).target === 'popup' &&
     (message as { type?: unknown }).type === 'fonts-changed'
   );
+}
+
+/** Страница обновления есть только в настоящем расширении, не на отладочном стенде. */
+export function canOpenUpdatePage(): boolean {
+  return typeof chrome !== 'undefined' && typeof chrome.tabs?.create === 'function';
+}
+
+export function openUpdatePage(): void {
+  void chrome.tabs.create({ url: chrome.runtime.getURL('update.html') });
 }
 
 export function errorMessage(error: unknown): string {

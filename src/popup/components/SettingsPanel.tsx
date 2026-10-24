@@ -7,7 +7,6 @@ import * as api from '../api';
 import { errorMessage, isBundledSource } from '../api';
 import { useT } from '../i18n';
 import type { Lang, ThemeName } from '../prefs';
-import { AppearanceControls } from './AppearanceControls';
 import { ProgressLine } from './ProgressLine';
 
 interface Props {
@@ -15,12 +14,14 @@ interface Props {
   /** Источники стилей: вшитый и добавленные пользователем, в порядке применения. */
   styleSources: StyleSourceMeta[];
   progress: ProgressPush | null;
-  showDebug: boolean;
   hostAccess: boolean;
   /** Имена из стилей, для которых глифа нет ни в одном шрифте: искать их бессмысленно. */
   glyphMissing: string[];
   theme: ThemeName;
   lang: Lang;
+  /** Версия новее установленной и переход к обновлению. */
+  updateVersion?: string | null;
+  onUpdate?: () => void;
   onClose: () => void;
   onTheme: (theme: ThemeName) => void;
   onLang: (lang: Lang) => void;
@@ -33,11 +34,10 @@ interface Props {
   /** Обновление вшитых файлов: перечитать шрифты и стили из поставки. */
   onRefreshFonts: () => Promise<void>;
   onRefreshStyles: () => Promise<void>;
-  onToggleDebug: (value: boolean) => void;
 }
 
 /** Длительность закрытия: совпадает с анимациями `.settings-*-out` в styles.css. */
-const CLOSE_ANIM_MS = 150;
+const CLOSE_ANIM_MS = 300;
 /** Сколько ошибка секции висит на экране, прежде чем убраться сама. */
 const ERROR_TTL_MS = 4000;
 
@@ -46,12 +46,12 @@ const ERROR_TTL_MS = 4000;
  * должно быть одного размера и вида, иначе форма «прыгает» при входе в правку.
  */
 const PILL_CLASS =
-  'min-w-[68px] shrink-0 cursor-pointer rounded-full bg-[var(--soft-2)] px-2.5 py-[4px] text-center text-[11px] leading-tight text-[var(--text)] transition hover:bg-[var(--soft-3)]';
+  'glass-pill min-w-[68px] shrink-0 cursor-pointer rounded-full px-3 py-[5px] text-center text-[11px] leading-tight text-[var(--text)] transition';
 const DANGER_PILL_CLASS =
   'shrink-0 cursor-pointer rounded-full bg-rose-500/10 px-2.5 py-[4px] text-center text-[11px] leading-tight text-rose-400 transition hover:bg-rose-500/20';
 /** Обновление вшитого набора: маленькое текстовое облачко рядом с заголовком группы. */
 const REFRESH_PILL_CLASS =
-  'shrink-0 cursor-pointer rounded-full bg-[var(--soft-2)] px-2 py-[2px] text-[10px] leading-tight text-[var(--text-2)] transition hover:bg-[var(--soft-3)] hover:text-[var(--text)]';
+  'glass-pill shrink-0 cursor-pointer rounded-full px-2.5 py-[2px] text-[10px] leading-tight text-[var(--text-2)] transition hover:text-[var(--text)]';
 /** Облачко-предупреждение: по клику открывается список проблемных имён. */
 const WARNING_PILL_CLASS =
   'cursor-pointer rounded-full bg-amber-500/10 px-2.5 py-[3px] text-left text-[10px] leading-tight text-amber-500 transition hover:bg-amber-500/20';
@@ -60,7 +60,7 @@ const WARNING_PILL_CLASS =
 const INLINE_SUBMIT_CLASS =
   'absolute top-1/2 right-[3px] -translate-y-[7px] rounded-[6px] px-2 py-[2px] text-center text-[10px] leading-tight transition disabled:pointer-events-none';
 const INPUT_CLASS =
-  'w-full min-w-0 select-text rounded-lg bg-[var(--input)] px-2 py-[3px] text-[11px] text-[var(--text)] outline-none ring-1 transition placeholder:text-[var(--muted)] disabled:opacity-60';
+  'w-full min-w-0 select-text rounded-full bg-[var(--input)] px-3 py-[4px] text-[11px] text-[var(--text)] outline-none ring-1 transition placeholder:text-[var(--muted)] disabled:opacity-60';
 /** Тон поля ссылки: ошибка красит рамку в красный, пока текст не поправят. */
 const INPUT_TONE = 'ring-[var(--line)] focus:ring-[var(--accent)]';
 const INPUT_TONE_ERROR = 'ring-rose-500 focus:ring-rose-500';
@@ -78,10 +78,10 @@ function nameFromFile(fileName: string): string {
  * «все файлы». Шрифт иконок — это woff/woff2/ttf/eot, словарь стилей — только .less.
  */
 const ACCEPTED: Record<'font' | 'less', { extensions: string[]; error: 'onlyFont' | 'onlyLess' }> =
-{
-  font: { extensions: ['.woff', '.woff2', '.ttf', '.eot'], error: 'onlyFont' },
-  less: { extensions: ['.less'], error: 'onlyLess' },
-};
+  {
+    font: { extensions: ['.woff', '.woff2', '.ttf', '.eot'], error: 'onlyFont' },
+    less: { extensions: ['.less'], error: 'onlyLess' },
+  };
 
 /** Расширение из имени файла или адреса: `icons.woff2?v=3` — это `.woff2`. */
 function extensionOf(value: string): string {
@@ -275,12 +275,12 @@ function SourceSection({
   const canSubmit = hasLink && !working;
 
   return (
-    <section className="space-y-1.5">
+    <section className="glass-flat space-y-2.5 rounded-3xl p-4">
       <div className="flex items-center justify-between gap-2">
         {/* Обновление вшитого набора стоит сразу за названием группы: так видно, к чему
             оно относится, и не отнимает место у «Добавить» справа. */}
         <div className="flex min-w-0 items-center gap-2">
-          <p className="truncate text-[12px] font-medium tracking-wide text-[var(--muted)] uppercase">
+          <p className="truncate text-[11px] font-semibold tracking-[0.12em] text-[var(--muted)] uppercase">
             {title}
           </p>
           {onRefresh && current?.bundled && (
@@ -421,8 +421,9 @@ function SourceSection({
                 ширину у ссылки и не висит впустую, пока ссылку не ввели. */}
             <div className="relative min-w-0 flex-1">
               <input
-                className={`${INPUT_CLASS} ${hasLink ? INPUT_WITH_BUTTON : ''} ${linkError ? INPUT_TONE_ERROR : INPUT_TONE
-                  }`}
+                className={`${INPUT_CLASS} ${hasLink ? INPUT_WITH_BUTTON : ''} ${
+                  linkError ? INPUT_TONE_ERROR : INPUT_TONE
+                }`}
                 value={url}
                 placeholder={urlPlaceholder}
                 disabled={working}
@@ -441,10 +442,11 @@ function SourceSection({
                   onClick={submitUrl}
                   disabled={working}
                   title={t('addByUrl')}
-                  className={`${INLINE_SUBMIT_CLASS} ${canSubmit
-                    ? 'cursor-pointer bg-[var(--accent)] font-medium text-white hover:brightness-110'
-                    : 'cursor-default bg-[var(--soft-2)] text-[var(--muted)]'
-                    }`}
+                  className={`${INLINE_SUBMIT_CLASS} ${
+                    canSubmit
+                      ? 'cursor-pointer bg-[var(--accent)] font-medium text-white hover:brightness-110'
+                      : 'cursor-default bg-[var(--soft-2)] text-[var(--muted)]'
+                  }`}
                 >
                   {t('add')}
                 </button>
@@ -550,15 +552,76 @@ function MissingNamesDialog({ names, onClose }: { names: string[]; onClose: () =
   );
 }
 
+/** Сегментированный переключатель в духе iOS: выбранный вариант — светлая «капсула». */
+function Segmented<T extends string>({
+  value,
+  options,
+  label,
+  onChange,
+}: {
+  value: T;
+  options: Array<{ value: T; label: string }>;
+  label: string;
+  onChange: (value: T) => void;
+}) {
+  return (
+    <div role="radiogroup" aria-label={label} className="glass-pill flex rounded-full p-0.5">
+      {options.map((option) => {
+        const active = option.value === value;
+        return (
+          <button
+            key={option.value}
+            type="button"
+            role="radio"
+            aria-checked={active}
+            onClick={() => onChange(option.value)}
+            className={`cursor-pointer rounded-full px-3.5 py-1 text-[12px] transition ${
+              active
+                ? 'bg-[var(--soft-3)] font-medium text-[var(--text)] shadow-[0_1px_4px_rgb(0_0_0/0.25)]'
+                : 'text-[var(--muted)] hover:text-[var(--text)]'
+            }`}
+          >
+            {option.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+/** Стеклянная карточка настроек с заголовком. */
+function Card({ title, children }: { title?: string; children: ReactNode }) {
+  return (
+    <section className="glass-flat space-y-2 rounded-3xl p-4">
+      {title && (
+        <p className="text-[11px] font-semibold tracking-[0.12em] text-[var(--muted)] uppercase">
+          {title}
+        </p>
+      )}
+      {children}
+    </section>
+  );
+}
+
+function Row({ label, children }: { label: ReactNode; children: ReactNode }) {
+  return (
+    <div className="flex min-h-[36px] items-center justify-between gap-3 text-[13px] text-[var(--text)]">
+      <span className="min-w-0">{label}</span>
+      {children}
+    </div>
+  );
+}
+
 export function SettingsPanel({
   fonts,
   styleSources,
   progress,
-  showDebug,
   hostAccess,
   glyphMissing,
   theme,
   lang,
+  updateVersion,
+  onUpdate,
   onClose,
   onTheme,
   onLang,
@@ -570,7 +633,6 @@ export function SettingsPanel({
   onRemoveStyle,
   onRefreshFonts,
   onRefreshStyles,
-  onToggleDebug,
 }: Props) {
   const t = useT();
   const [closing, setClosing] = useState(false);
@@ -635,11 +697,20 @@ export function SettingsPanel({
     onClose();
   }, [closing, onClose]);
 
+  // Escape закрывает панель, пока не открыто вложенное окно со списком.
+  useEffect(() => {
+    if (missingOpen) return undefined;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') requestClose();
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [missingOpen, requestClose]);
+
   /**
    * Имена из стилей, которых нет в шрифте, искать бессмысленно: их глифов в шрифте
    * просто нет (наборы бывают из разных версий). Без этой подсказки это выглядит
    * как провал распознавания: имя есть в стилях, а в выдаче не появляется никогда.
-   * Полный список открывается по клику: в строке секции он не помещается.
    */
   const glyphWarning =
     glyphMissing.length > 0 ? (
@@ -654,48 +725,37 @@ export function SettingsPanel({
     ) : null;
 
   return (
-    /*
-     * Панель прижата к верху, а не по центру: при входе в правку добавляется
-     * строка, и от центрирования «уезжал» весь блок вместе с заголовком.
-     */
     <div
-      /* Затемнение не анимируется: оно появляется и исчезает вместе с панелью.
-         Плавность тут стоила дороже, чем давала — анимация прозрачности на слое
-         поверх всего интерфейса умеет застывать недорисованной.
-         `overflow-hidden` нужен выезду: панель выходит из-за верхнего края окна,
-         а карточка сборки — из-за нижнего, и до конца анимации их надо подрезать. */
-      className="settings-backdrop absolute inset-0 z-10 flex items-start justify-center overflow-hidden bg-black/60 p-2"
+      // Затемнение не анимируется: оно появляется и исчезает вместе с панелью
+      // (анимация прозрачности на слое поверх всего интерфейса умеет застывать недорисованной).
+      className={`${closing ? 'settings-backdrop-out' : 'settings-backdrop'} absolute inset-0 z-10 flex items-start justify-center overflow-hidden p-2`}
       onClick={requestClose}
     >
       <div
-        className={`${closing ? 'settings-card-out' : 'settings-card'} flex max-h-full w-full flex-col rounded-2xl bg-[var(--panel)] ring-1 ring-[var(--line)]`}
+        className={`${closing ? 'settings-card-out' : 'settings-card'} glass-strong flex h-full w-full flex-col rounded-[32px]`}
         // Клик внутри панели не должен её закрывать.
         onClick={(event) => event.stopPropagation()}
-        /* Конец анимации — самый точный момент размонтирования. Таймер остаётся
-           запасным: если анимацию пропустит браузер или задержит таймер, панель
-           не должна застрять полупрозрачной. */
         onAnimationEnd={(event) => {
           if (event.target === event.currentTarget) finishClose();
         }}
       >
-        {/* Прокручивается только содержимое: футер с внешним видом остаётся на месте,
-            и раскрытые списки не обрезаются краем прокручиваемого блока. */}
-        <div className="thin-scroll flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-3">
-          <div className="flex items-center justify-between">
-            <h2 className="text-lg font-semibold tracking-tight text-[var(--text)]">
-              {t('settings')}
-            </h2>
-            <button
-              type="button"
-              aria-label={t('close')}
-              title={t('close')}
-              className="flex h-7 w-7 cursor-pointer items-center justify-center rounded-full bg-[var(--soft-2)] text-xs text-[var(--text-2)] transition hover:bg-[var(--soft-3)] hover:text-[var(--text)]"
-              onClick={requestClose}
-            >
-              ✕
-            </button>
-          </div>
+        <div className="flex shrink-0 items-center justify-between px-4 pt-4 pb-2.5">
+          <h2 className="text-[17px] font-semibold tracking-tight text-[var(--text)]">
+            {t('settings')}
+          </h2>
+          <button
+            type="button"
+            aria-label={t('close')}
+            title={t('close')}
+            className="glass-pill flex h-7 w-7 cursor-pointer items-center justify-center rounded-full text-xs text-[var(--text-2)] transition hover:text-[var(--text)]"
+            onClick={requestClose}
+          >
+            ✕
+          </button>
+        </div>
 
+        {/* Прокручивается только содержимое: заголовок остаётся на месте. */}
+        <div className="thin-scroll flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto px-3 pb-3">
           <SourceSection
             title={t('sectionDictionary')}
             current={styleItems[0] ?? null}
@@ -712,8 +772,6 @@ export function SettingsPanel({
             onRefresh={onRefreshStyles}
             warning={glyphWarning}
           />
-
-          <div className="h-px bg-[var(--line)]" />
 
           <SourceSection
             title={t('sectionFont')}
@@ -732,47 +790,50 @@ export function SettingsPanel({
             progress={progress}
           />
 
-          <div className="h-px bg-[var(--line)]" />
-
-          <div className="space-y-1.5">
-            <p className="text-[12px] font-medium tracking-wide text-[var(--muted)] uppercase">
-              {t('sectionDev')}
-            </p>
-            <label className="flex w-fit cursor-pointer items-center gap-2 text-[11px] text-[var(--text-2)]">
-              <input
-                type="checkbox"
-                className="h-3.5 w-3.5 cursor-pointer accent-[var(--accent)]"
-                checked={showDebug}
-                onChange={(event) => onToggleDebug(event.target.checked)}
+          <Card title={t('sectionAppearance')}>
+            <Row label={t('theme')}>
+              <Segmented<ThemeName>
+                label={t('theme')}
+                value={theme}
+                onChange={onTheme}
+                options={[
+                  { value: 'light', label: t('themeLight') },
+                  { value: 'dark', label: t('themeDark') },
+                ]}
               />
-              {t('debug')}
-            </label>
+            </Row>
+            <Row label={t('language')}>
+              <Segmented<Lang>
+                label={t('language')}
+                value={lang}
+                onChange={onLang}
+                options={[
+                  { value: 'ru', label: 'RU' },
+                  { value: 'en', label: 'EN' },
+                ]}
+              />
+            </Row>
+          </Card>
+
+          {/* О программе — по центру: версия, набор иконок, автор; при новой версии — кнопка. */}
+          <div className="flex flex-col items-center gap-1.5 px-1.5 mt-auto pt-1 text-center text-[10px] text-[var(--muted)]">
+            <span>
+              {t('version')} <span className="font-mono text-[var(--text-2)]">{APP_VERSION}</span>
+              {' · '}
+              {t('icons')} <span className="font-mono text-[var(--text-2)]">{SABY_VERSION}</span>
+              {' · '}
+              {APP_AUTHOR}
+            </span>
+            {updateVersion && onUpdate && (
+              <button
+                type="button"
+                onClick={onUpdate}
+                className="h-7 cursor-pointer rounded-full border border-white/30 bg-[var(--accent)] px-4 text-[11px] font-medium text-white shadow-[inset_0_1px_0_rgb(255_255_255/0.4)] transition hover:brightness-110"
+              >
+                {t('updateOpen')} · {updateVersion}
+              </button>
+            )}
           </div>
-        </div>
-
-        {/* Футер панели: тема слева, язык справа, обе выровнены по центру строки. */}
-        <div className="shrink-0 border-t border-[var(--line)] px-3 py-2.5">
-          <AppearanceControls theme={theme} lang={lang} onTheme={onTheme} onLang={onLang} />
-        </div>
-      </div>
-
-      {/*
-       * Данные сборки — совсем отдельное окно в левом нижнем углу popup, а не
-       * часть панели настроек: при открытых настройках видно и то, и другое,
-       * и вторая карточка не тянет высоту первой. Появляется снизу вверх —
-       * навстречу панели, которая въезжает сверху вниз.
-       */}
-      <div
-        className={`${closing ? 'settings-info-out' : 'settings-info'} absolute bottom-3 left-3 rounded-xl bg-[var(--panel)] px-3 py-2 text-left text-[10px] leading-[1.6] text-[var(--muted)] ring-1 ring-[var(--line)]`}
-      >
-        <div>
-          {t('author')}: {APP_AUTHOR}
-        </div>
-        <div>
-          {t('version')}: {APP_VERSION}
-        </div>
-        <div>
-          {t('icons')}: {SABY_VERSION}
         </div>
       </div>
 

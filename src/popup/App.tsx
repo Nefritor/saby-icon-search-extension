@@ -1,8 +1,9 @@
-import { Button, Spinner } from '@heroui/react';
+import { Spinner } from '@heroui/react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { flushSync } from 'react-dom';
 import type { ProgressPush, SearchResponse } from '../shared/messaging';
 import type { FontMeta, SearchResult, StyleSourceMeta } from '../shared/types';
+import { checkForUpdate } from '../shared/update';
 import * as api from './api';
 import { errorMessage } from './api';
 import { BrandMark } from './components/BrandMark';
@@ -29,11 +30,6 @@ import {
   type ThemeName,
 } from './prefs';
 
-interface Stats {
-  considered: number;
-  tookMs: number;
-}
-
 /** Кнопка-иконка в заголовке: отмена и возврат. */
 function HeaderIconButton({
   label,
@@ -53,7 +49,7 @@ function HeaderIconButton({
       disabled={disabled}
       aria-label={label}
       title={label}
-      className="flex h-7 w-7 shrink-0 cursor-pointer items-center justify-center self-center rounded-lg bg-[var(--soft-2)] text-[var(--text-2)] transition hover:bg-[var(--soft-3)] hover:text-[var(--text)] disabled:cursor-default disabled:opacity-30 disabled:hover:bg-[var(--soft-2)]"
+      className="flex h-7 w-7 shrink-0 cursor-pointer items-center justify-center self-center rounded-full text-[var(--muted)] transition hover:bg-[var(--soft-2)] hover:text-[var(--text)] disabled:cursor-default disabled:opacity-25 disabled:hover:bg-transparent"
     >
       {children}
     </button>
@@ -75,6 +71,24 @@ function UndoIcon() {
     >
       <path d="M9 14 4 9l5-5" />
       <path d="M4 9h9.5a5.5 5.5 0 0 1 0 11H10" />
+    </svg>
+  );
+}
+
+function ClearIcon() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      width="15"
+      height="15"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M4 7h16M9 7V4.5h6V7M6.5 7l1 13h9l1-13" />
     </svg>
   );
 }
@@ -103,16 +117,16 @@ export function App() {
 
   const [fonts, setFonts] = useState<FontMeta[]>([]);
   const [styleSources, setStyleSources] = useState<StyleSourceMeta[]>([]);
-  const [showDebug, setShowDebug] = useState(false);
   const [results, setResults] = useState<SearchResult[]>([]);
   const [selected, setSelected] = useState<SearchResult | null>(null);
   const [loadedFontIds, setLoadedFontIds] = useState<Set<string>>(new Set());
-  const [stats, setStats] = useState<Stats | null>(null);
   /** Разобрано из .less и найдено в шрифте. Не сбрасывается при очистке холста. */
   const [glyphTotal, setGlyphTotal] = useState<number | null>(null);
   /** Имена из стилей, для которых глифа нет ни в одном шрифте: их не найти никогда. */
   const [glyphMissing, setGlyphMissing] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
+  /** Версия новее установленной, если на GitHub вышел релиз. */
+  const [updateVersion, setUpdateVersion] = useState<string | null>(null);
   const [progress, setProgress] = useState<ProgressPush | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [panelOpen, setPanelOpen] = useState(false);
@@ -158,7 +172,6 @@ export function App() {
 
   const applyResponse = useCallback((response: SearchResponse) => {
     setResults(response.results);
-    setStats({ considered: response.considered, tookMs: response.tookMs });
     setGlyphTotal(response.considered);
     // Выделяем верхний результат сразу, чтобы панель деталей не пустовала.
     setSelected(
@@ -231,7 +244,9 @@ export function App() {
       await refreshStyles();
     })();
 
-    void api.getShowDebug().then(setShowDebug);
+    void checkForUpdate().then((status) =>
+      setUpdateVersion(status.available && status.latest ? status.latest.version : null),
+    );
     void api.hasHostAccess().then(setHostAccess);
     void resumePendingUrl();
 
@@ -294,7 +309,6 @@ export function App() {
     sketchRef.current?.clear();
     setResults([]);
     setSelected(null);
-    setStats(null);
   }, []);
 
   // Именно этот колбэк получает холст: он означает «в наброске слишком мало чернил»,
@@ -304,7 +318,6 @@ export function App() {
     setBusy(false);
     setResults([]);
     setSelected(null);
-    setStats(null);
   }, []);
 
   const handleRemoveFont = useCallback(
@@ -354,11 +367,6 @@ export function App() {
     if (payload) await runSearch(payload);
   }, [refreshStyles, runSearch]);
 
-  const handleToggleDebug = useCallback((value: boolean) => {
-    setShowDebug(value);
-    void api.setShowDebug(value);
-  }, []);
-
   /*
    * Смена темы: класс на <html> и состояние React меняются в одном задании, внутри
    * окна переходов по цветам. Так и цвета, и свитч (иконка, кружок, его ход)
@@ -387,6 +395,44 @@ export function App() {
     hintTimer.current = window.setTimeout(() => setHint(null), 2600);
   }, [lang]);
 
+  /** Страница обновления открывается во вкладке: диалоги выбора папки закрывают popup. */
+  const handleOpenUpdate = useCallback(() => {
+    if (!api.canOpenUpdatePage()) return;
+    api.openUpdatePage();
+    window.close();
+  }, []);
+
+  /** Копирует имя класса и коротко подтверждает это подсказкой над холстом. */
+  const copyClass = useCallback(
+    (result: SearchResult | null) => {
+      if (!result?.iconName) return;
+      void navigator.clipboard
+        .writeText(result.iconName)
+        .then(() => {
+          setHint(`${translate(lang, 'copied')}: ${result.iconName}`);
+          if (hintTimer.current !== null) window.clearTimeout(hintTimer.current);
+          hintTimer.current = window.setTimeout(() => setHint(null), 1800);
+        })
+        .catch(() => undefined);
+    },
+    [lang],
+  );
+
+  // 1–5 выбирают результат, Enter копирует имя класса выбранного.
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (panelOpen || event.ctrlKey || event.metaKey || event.altKey) return;
+      const index = Number(event.key) - 1;
+      if (Number.isInteger(index) && index >= 0 && index < results.length) {
+        setSelected(results[index]);
+      } else if (event.key === 'Enter') {
+        copyClass(selected);
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [copyClass, panelOpen, results, selected]);
+
   const handleGrantAccess = useCallback(async () => {
     try {
       const granted = await api.requestHostAccess();
@@ -405,38 +451,43 @@ export function App() {
     <LangContext.Provider value={lang}>
       {/* Весь текст интерфейса — не для выделения: протяжка мышью по окну раньше
           подсвечивала подписи и цифры. Свой текст остается только у полей ввода. */}
-      <div className="relative flex h-[580px] w-[400px] flex-col gap-2 bg-background p-3 text-foreground select-none">
-        <header className="flex shrink-0 items-baseline justify-between gap-2 items-center">
-          {/* Знак стоит перед именем и не участвует в выравнивании по базовой линии:
-              у картинки её нет, и `items-baseline` увёл бы её вниз. */}
-          <BrandMark className="h-9 w-9 p-1.5 shrink-0 self-center" />
-          <h1 className="min-w-0 flex-1 truncate text-lg font-semibold tracking-tight select-none">
+      <div
+        className={`glass-root relative isolate flex h-[580px] w-[400px] flex-col gap-2.5 overflow-hidden p-4 text-foreground select-none ${
+          panelOpen ? 'aurora-paused' : ''
+        }`}
+      >
+        {/* Живой фон за стеклом: три цветных пятна медленно плывут. Пока открыты настройки,
+            он стоит на месте — иначе выезжающая панель делила бы кадры с его анимацией. */}
+        <div className="aurora" aria-hidden="true">
+          <i />
+          <i />
+          <i />
+        </div>
+
+        <header className="flex shrink-0 items-center gap-2">
+          <BrandMark className="h-6 w-6 shrink-0 self-center" />
+          <h1 className="min-w-0 flex-1 truncate text-[14px] font-semibold tracking-tight text-[var(--text)] select-none">
             Saby Icon Search
           </h1>
 
-          {/* Всё в заголовке сидит на одной базовой линии: иначе крупное имя
-              и мелкие подписи выглядят «поехавшими». */}
-          <div className="flex shrink-0 items-baseline gap-1.5">
-            {/* Спиннер поиска отодвинут от кнопок: вплотную он читается как их часть. */}
-            {busy && <Spinner size="sm" className="mr-2 self-center" />}
-            <HeaderIconButton
-              label={t('undo')}
-              disabled={!history.canUndo}
-              onClick={() => sketchRef.current?.undo()}
-            >
-              <UndoIcon />
-            </HeaderIconButton>
-            <HeaderIconButton
-              label={t('redo')}
-              disabled={!history.canRedo}
-              onClick={() => sketchRef.current?.redo()}
-            >
-              <RedoIcon />
-            </HeaderIconButton>
-            <Button size="sm" variant="ghost" onPress={handleClear}>
-              {t('clear')}
-            </Button>
-          </div>
+          {busy && <Spinner size="sm" className="mr-1 self-center" />}
+          <HeaderIconButton
+            label={`${t('undo')} (Ctrl+Z)`}
+            disabled={!history.canUndo}
+            onClick={() => sketchRef.current?.undo()}
+          >
+            <UndoIcon />
+          </HeaderIconButton>
+          <HeaderIconButton
+            label={`${t('redo')} (Ctrl+Shift+Z)`}
+            disabled={!history.canRedo}
+            onClick={() => sketchRef.current?.redo()}
+          >
+            <RedoIcon />
+          </HeaderIconButton>
+          <HeaderIconButton label={t('clear')} disabled={false} onClick={handleClear}>
+            <ClearIcon />
+          </HeaderIconButton>
         </header>
 
         <SketchCanvas
@@ -455,7 +506,7 @@ export function App() {
         */}
         {results.length > 0 ? (
           <>
-            <span className="mt-1.5 shrink-0 text-[10px] uppercase tracking-wider text-[var(--muted)]">
+            <span className="shrink-0 text-[10px] uppercase tracking-[0.14em] text-[var(--muted)]">
               {t('topMatches')}
             </span>
 
@@ -465,10 +516,11 @@ export function App() {
               loadedFontIds={loadedFontIds}
               selectedGlyphId={selected?.glyphId ?? null}
               onSelect={setSelected}
+              onCopy={copyClass}
             />
 
             <div className="min-h-0 flex-1">
-              <GlyphDetails result={selected} showDebug={showDebug} family={selectedFamily} />
+              <GlyphDetails result={selected} family={selectedFamily} />
             </div>
           </>
         ) : (
@@ -504,8 +556,9 @@ export function App() {
 
           <FooterBar
             glyphTotal={glyphTotal}
-            debugMs={stats && showDebug ? stats.tookMs : null}
             busy={busy}
+            updateVersion={api.canOpenUpdatePage() ? updateVersion : null}
+            onUpdate={handleOpenUpdate}
             onOpenSettings={() => setPanelOpen(true)}
           />
         </div>
@@ -515,11 +568,12 @@ export function App() {
             fonts={fonts}
             styleSources={styleSources}
             progress={progress}
-            showDebug={showDebug}
             hostAccess={hostAccess}
             glyphMissing={glyphMissing}
             theme={theme}
             lang={lang}
+            updateVersion={api.canOpenUpdatePage() ? updateVersion : null}
+            onUpdate={handleOpenUpdate}
             onTheme={handleTheme}
             onLang={handleLang}
             onClose={() => setPanelOpen(false)}
@@ -547,7 +601,6 @@ export function App() {
             onRemoveStyle={handleRemoveStyle}
             onRefreshFonts={handleRefreshFonts}
             onRefreshStyles={handleRefreshStyles}
-            onToggleDebug={handleToggleDebug}
           />
         )}
       </div>
@@ -561,7 +614,10 @@ function EmptyHint() {
     <div className="flex h-full flex-col items-center justify-center gap-2 px-6 text-center">
       {/* Вшитые шрифт и стили ставятся при первом запуске, поэтому «добавьте файл»
           здесь — лишний шаг: рисовать можно сразу. */}
-      <p className="text-[14px] leading-relaxed text-[var(--muted)]">{t('emptyHint')}</p>
+      <p className="text-[13px] leading-relaxed text-[var(--muted)]">{t('emptyHint')}</p>
+      <p className="mt-1 font-mono text-[9px] leading-relaxed text-[var(--muted)] opacity-60">
+        {t('shortcuts')}
+      </p>
     </div>
   );
 }

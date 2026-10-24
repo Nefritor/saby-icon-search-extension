@@ -19,15 +19,15 @@ type YieldableScheduler = { yield?: () => Promise<void> };
  * управление одновременно, и общий канал перетёр бы чужие обработчики.
  */
 export function yieldToEventLoop(): Promise<void> {
-    const scheduler = (globalThis as { scheduler?: YieldableScheduler }).scheduler;
-    if (typeof scheduler?.yield === 'function') return scheduler.yield();
+  const scheduler = (globalThis as { scheduler?: YieldableScheduler }).scheduler;
+  if (typeof scheduler?.yield === 'function') return scheduler.yield();
 
-    return new Promise<void>((resolve) => {
-        const channel = new MessageChannel();
-        channel.port1.onmessage = () => {
-            channel.port1.close();
-            resolve();
-        };
-        channel.port2.postMessage(null);
-    });
+  return new Promise<void>((resolve) => {
+    const channel = new MessageChannel();
+    channel.port1.onmessage = () => {
+      channel.port1.close();
+      resolve();
+    };
+    channel.port2.postMessage(null);
+  });
 }
