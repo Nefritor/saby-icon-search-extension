@@ -3,3 +3,7 @@ dist/
 *.log
 .vite/
 .DS_Store
+
+# Локальные настройки инструментов
+.claude/
+*.local
