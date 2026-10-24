@@ -1,0 +1,139 @@
+/*
+ * Страница обновления. Палитра — переменные из styles.css. CSS собирается в один файл
+ * на все страницы расширения, поэтому каждое правило здесь начинается с `body.update-page`:
+ * иначе `button` и `h1` перекрасили бы popup.
+ */
+body.update-page {
+  margin: 0;
+  min-height: 100vh;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  padding: 48px 16px;
+  box-sizing: border-box;
+  background: var(--surface);
+  color: var(--text);
+  font:
+    14px/1.5 system-ui,
+    -apple-system,
+    'Segoe UI',
+    Roboto,
+    sans-serif;
+}
+
+body.update-page #app {
+  width: 100%;
+  max-width: 520px;
+  padding: 24px;
+  box-sizing: border-box;
+  border-radius: 16px;
+  background: var(--panel);
+  box-shadow: 0 0 0 1px var(--line);
+}
+
+body.update-page h1 {
+  margin: 0 0 4px;
+  font-size: 20px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+body.update-page .versions {
+  display: flex;
+  gap: 16px;
+  margin: 12px 0;
+  color: var(--text-2);
+}
+
+body.update-page .versions b {
+  color: var(--text);
+}
+
+body.update-page .status {
+  margin: 12px 0;
+  padding: 8px 12px;
+  border-radius: 10px;
+  background: var(--soft);
+  color: var(--text-2);
+}
+
+body.update-page .status.ok {
+  color: #22c55e;
+}
+
+body.update-page .status.error {
+  color: #f43f5e;
+}
+
+body.update-page .notes {
+  max-height: 200px;
+  overflow-y: auto;
+  margin: 12px 0;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--soft);
+  color: var(--text-2);
+  font-size: 13px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+body.update-page .folder {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 12px 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+body.update-page .folder span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+body.update-page .actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+body.update-page button,
+body.update-page a.button {
+  padding: 7px 14px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--soft-2);
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+body.update-page button:hover:not(:disabled),
+body.update-page a.button:hover {
+  filter: brightness(1.15);
+}
+
+body.update-page button.primary {
+  background: var(--accent);
+  color: #fff;
+  font-weight: 500;
+}
+
+body.update-page button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+body.update-page progress {
+  width: 100%;
+  height: 6px;
+  margin-top: 8px;
+  accent-color: var(--accent);
+}
