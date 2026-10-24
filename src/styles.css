@@ -40,30 +40,30 @@
   --accent: #0a84ff;
   --good: #30d158;
 
-  --surface: #e9eef6;
-  --panel: rgb(255 255 255 / 0.62);
-  --input: rgb(255 255 255 / 0.6);
-  --text: #101216;
-  --text-2: #3a3f4a;
-  --muted: #6b7280;
-  --line: rgb(0 0 0 / 0.08);
-  --soft: rgb(255 255 255 / 0.42);
-  --soft-2: rgb(255 255 255 / 0.6);
-  --soft-3: rgb(255 255 255 / 0.8);
-  --scrollbar: rgb(0 0 0 / 0.2);
-  --canvas: rgb(255 255 255 / 0.92);
-  --canvas-line: rgb(255 255 255 / 0.9);
+  --surface: #d8dee8;
+  --panel: rgb(255 255 255 / 0.5);
+  --input: rgb(255 255 255 / 0.5);
+  --text: #12151b;
+  --text-2: #353b47;
+  --muted: #5d6573;
+  --line: rgb(0 0 0 / 0.1);
+  --soft: rgb(255 255 255 / 0.3);
+  --soft-2: rgb(255 255 255 / 0.45);
+  --soft-3: rgb(255 255 255 / 0.62);
+  --scrollbar: rgb(0 0 0 / 0.22);
+  --canvas: rgb(243 245 249 / 0.96);
+  --canvas-line: rgb(255 255 255 / 0.7);
 
-  --sheet: rgb(240 244 251 / 0.94);
-  --glass: rgb(255 255 255 / 0.5);
-  --glass-strong: rgb(255 255 255 / 0.72);
-  --glass-edge: rgb(255 255 255 / 0.7);
-  --glass-hi: rgb(255 255 255 / 0.9);
-  --glass-shadow: 0 10px 30px -14px rgb(40 60 100 / 0.35);
-  --backdrop: #eaf0f8;
-  --blob-1: rgb(110 160 255 / 0.75);
-  --blob-2: rgb(195 150 255 / 0.6);
-  --blob-3: rgb(100 220 185 / 0.65);
+  --sheet: rgb(222 228 238 / 0.95);
+  --glass: rgb(255 255 255 / 0.34);
+  --glass-strong: rgb(255 255 255 / 0.55);
+  --glass-edge: rgb(255 255 255 / 0.55);
+  --glass-hi: rgb(255 255 255 / 0.7);
+  --glass-shadow: 0 10px 30px -14px rgb(40 60 100 / 0.4);
+  --backdrop: #dce2ec;
+  --blob-1: rgb(120 152 214 / 0.42);
+  --blob-2: rgb(146 154 220 / 0.34);
+  --blob-3: rgb(160 186 218 / 0.45);
 }
 
 .dark {
@@ -87,10 +87,10 @@
   --glass-edge: rgb(255 255 255 / 0.16);
   --glass-hi: rgb(255 255 255 / 0.22);
   --glass-shadow: 0 12px 32px -14px rgb(0 0 0 / 0.65);
-  --backdrop: #0a0c12;
-  --blob-1: rgb(36 96 205 / 0.8);
-  --blob-2: rgb(112 62 190 / 0.6);
-  --blob-3: rgb(24 150 112 / 0.65);
+  --backdrop: #0a0d14;
+  --blob-1: rgb(58 94 196 / 0.45);
+  --blob-2: rgb(84 86 204 / 0.32);
+  --blob-3: rgb(38 70 134 / 0.5);
 }
 
 html,
@@ -282,13 +282,65 @@ body.popup {
  * range-input, `direction: rtl` ставит минимум вниз — так ползунок читается
  * сверху вниз, как обычная шкала.
  */
+/*
+ * Ползунок толщины в стиле жидкого стекла: дорожка — матовая капсула с внутренней тенью и
+ * светлой кромкой, пройденная часть — более светлое стекло, бегунок — плоский стеклянный диск
+ * с размытием фона. Шаг у input дробный, поэтому бегунок едет плавно;
+ * `--fill` выставляет компонент.
+ */
 .brush-slider {
+  -webkit-appearance: none;
+  appearance: none;
   flex: 1 1 auto;
   min-width: 0;
-  height: 14px;
+  height: 26px;
   margin: 0;
-  accent-color: var(--accent);
+  background: transparent;
   cursor: pointer;
+}
+
+.brush-slider:focus {
+  outline: none;
+}
+
+.brush-slider::-webkit-slider-runnable-track {
+  height: 10px;
+  border-radius: 999px;
+  border: 1px solid var(--glass-edge);
+  background: linear-gradient(90deg, var(--soft-3) var(--fill, 0%), var(--glass) var(--fill, 0%));
+  box-shadow:
+    inset 0 1px 2px rgb(0 0 0 / 0.28),
+    inset 0 -1px 0 var(--glass-hi);
+}
+
+.brush-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 18px;
+  height: 18px;
+  margin-top: -5px;
+  border-radius: 50%;
+  border: 1px solid rgb(255 255 255 / 0.7);
+  /* Плоский диск: ровная полупрозрачная заливка без объёмного блика. */
+  background: rgb(255 255 255 / 0.4);
+  -webkit-backdrop-filter: blur(6px) saturate(160%);
+  backdrop-filter: blur(6px) saturate(160%);
+  box-shadow: 0 1px 4px rgb(0 0 0 / 0.3);
+  transition: transform 140ms ease;
+}
+
+.brush-slider:hover::-webkit-slider-thumb {
+  transform: scale(1.06);
+}
+
+.brush-slider:active::-webkit-slider-thumb {
+  transform: scale(1.14);
+}
+
+.brush-slider:focus-visible::-webkit-slider-thumb {
+  box-shadow:
+    0 0 0 3px color-mix(in srgb, var(--accent) 50%, transparent),
+    0 1px 4px rgb(0 0 0 / 0.3);
 }
 
 /*

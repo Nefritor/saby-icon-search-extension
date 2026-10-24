@@ -2,7 +2,7 @@
   "name": "saby-icon-search",
   "private": true,
   "type": "module",
-  "version": "2.0.0",
+  "version": "2.0.1",
   "author": "Хамитов М. А.",
   "saby-version": "26.5100",
   "description": "Chrome extension: sketch a Saby icon on a canvas and find the closest glyphs in the font",

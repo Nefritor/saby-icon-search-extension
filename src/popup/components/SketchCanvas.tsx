@@ -12,6 +12,7 @@ import { bytesToBase64 } from '../../core/image/bits';
 import { SKETCH_SOURCE_SIZE } from '../../shared/constants';
 import { getLocal, removeLocal, setLocal } from '../../shared/storage';
 import { useT } from '../i18n';
+import { ToolSwitch } from './ToolSwitch';
 
 export interface SketchPayload {
   sketch: string;
@@ -94,6 +95,18 @@ interface HistoryEntry {
 }
 
 /** Карандаш: минимальный, но однозначный «это инструмент рисования». */
+/** Инструменты в порядке на панели: клавиша, подпись и значок. */
+const TOOLS: Array<{
+  id: Tool;
+  labelKey: 'brush' | 'eraser' | 'fill';
+  key: string;
+  Icon: () => React.JSX.Element;
+}> = [
+  { id: 'brush', labelKey: 'brush', key: 'B', Icon: () => <BrushIcon /> },
+  { id: 'eraser', labelKey: 'eraser', key: 'E', Icon: () => <EraserIcon /> },
+  { id: 'fill', labelKey: 'fill', key: 'F', Icon: () => <RollerIcon /> },
+];
+
 function BrushIcon() {
   return (
     <svg
@@ -638,64 +651,38 @@ export const SketchCanvas = forwardRef<SketchHandle, Props>(function SketchCanva
     scheduleSave();
   };
 
-  const toolClass = (active: boolean): string =>
-    `flex h-8 w-8 cursor-pointer items-center justify-center rounded-full transition ${
-      active
-        ? 'glass-pill text-[var(--text)]'
-        : 'text-[var(--muted)] hover:bg-[var(--soft-2)] hover:text-[var(--text)]'
-    }`;
-
   return (
     <div className="flex shrink-0 flex-col gap-2">
-      <div className="flex h-8 items-center gap-0.5">
-        <button
-          type="button"
-          className={toolClass(tool === 'brush')}
-          onClick={() => setTool('brush')}
-          aria-label={t('brush')}
-          title={`${t('brush')} (B)`}
-        >
-          <BrushIcon />
-        </button>
-        <button
-          type="button"
-          className={toolClass(tool === 'eraser')}
-          onClick={() => setTool('eraser')}
-          aria-label={t('eraser')}
-          title={`${t('eraser')} (E)`}
-        >
-          <EraserIcon />
-        </button>
-        <button
-          type="button"
-          className={toolClass(tool === 'fill')}
-          onClick={() => setTool('fill')}
-          aria-label={t('fill')}
-          title={`${t('fill')} (F)`}
-        >
-          <RollerIcon />
-        </button>
+      {/* Инструменты — трёхпозиционный переключатель: у выбранного показано название,
+          у остальных только значок. Если места мало (узкий контейнер), названия скрываются. */}
+      <div className="@container flex h-9 items-center gap-3">
+        <ToolSwitch<Tool>
+          value={tool}
+          onChange={setTool}
+          ariaLabel={t('tool')}
+          items={TOOLS.map(({ id, labelKey, key, Icon }) => ({
+            id,
+            label: t(labelKey),
+            title: `${t(labelKey)} (${key})`,
+            icon: <Icon />,
+          }))}
+        />
 
         {/* Толщина нужна кисти и ластику: заливка заливает область целиком. */}
         {tool !== 'fill' && (
-          <div className="ml-3 flex min-w-0 flex-1 items-center gap-3">
-            <input
-              type="range"
-              min={BRUSH_MIN}
-              max={BRUSH_MAX}
-              step={2}
-              value={brushWidth}
-              onChange={(event) => setBrushWidth(Number(event.target.value))}
-              className="brush-slider"
-              aria-label={t('brushWidth')}
-            />
-            <span className="flex h-5 w-5 shrink-0 items-center justify-center">
-              <span
-                className="rounded-full bg-[var(--text-2)]"
-                style={{ width: strokeWidth, height: strokeWidth }}
-              />
-            </span>
-          </div>
+          <input
+            type="range"
+            min={BRUSH_MIN}
+            max={BRUSH_MAX}
+            step={0.1}
+            value={brushWidth}
+            onChange={(event) => setBrushWidth(Number(event.target.value))}
+            className="brush-slider"
+            style={{
+              ['--fill' as string]: `${((brushWidth - BRUSH_MIN) / (BRUSH_MAX - BRUSH_MIN)) * 100}%`,
+            }}
+            aria-label={t('brushWidth')}
+          />
         )}
       </div>
 
