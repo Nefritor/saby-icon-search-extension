@@ -5,6 +5,15 @@
 Полностью на фронтенде: ни бэкенда, ни нейросетей на сервере. Модель ранжирования — крошечная
 (около тысячи весов, 10 КБ), обучена заранее и лежит в репозитории.
 
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/popup-dark.png">
+    <img src="docs/screenshots/popup-light.png" alt="Popup расширения: набросок лупы и пять найденных иконок, лучшая — icon-Search" width="480">
+  </picture>
+</p>
+
+Тёмная и светлая темы переключаются в настройках; на GitHub картинка подстраивается под вашу тему.
+
 ---
 
 ## Как это работает
